@@ -15,6 +15,6 @@ spec:
     spec:
       containers:
         - name: node-cicd-app
-         image: maanyarao/node-cicd-app:latest
+          image: maanyarao/node-cicd-app:latest
           ports:
             - containerPort: 3000
