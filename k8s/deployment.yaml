@@ -1,0 +1,20 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-cicd-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: node-cicd-app
+  template:
+    metadata:
+      labels:
+        app: node-cicd-app
+    spec:
+      containers:
+        - name: node-cicd-app
+          image: YOUR_DOCKERHUB_USERNAME/node-cicd-app:latest
+          ports:
+            - containerPort: 3000
