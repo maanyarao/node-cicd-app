@@ -231,7 +231,7 @@ app.get('/', (req, res) => {
     </div>
 
     <div class="main-card">
-      <h1>University Lab CI/CD Demo - Version 2</h1>
+      <h1>University Lab CI/CD Demo - Version 3</h1>
       <p class="subtitle">Automated Continuous Integration & Deployment powered by Jenkins</p>
 
       <div class="pipeline-visual">

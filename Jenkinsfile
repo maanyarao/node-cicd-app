@@ -9,27 +9,30 @@ pipeline {
     }
 
     stages {
-        stage('Checkout') {
+        stage('Jenkins Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Syntax Check') {
+        stage('Build and Test') {
             steps {
+                echo 'Running build verification and syntax tests...'
                 sh 'node --check app.js'
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Docker Build') {
             steps {
+                echo "Building Docker image: ${IMAGE_NAME}:${BUILD_NUMBER}"
                 sh 'docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .'
                 sh 'docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest'
             }
         }
 
-        stage('Push to Docker Hub') {
+        stage('Push Image') {
             steps {
+                echo "Pushing image to Docker Hub with tag :${BUILD_NUMBER} and :latest..."
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-credentials',
                     usernameVariable: 'DOCKER_USER',
@@ -46,8 +49,9 @@ pipeline {
             }
         }
 
-        stage('Deploy to Minikube') {
+        stage('Minikube Deployment') {
             steps {
+                echo 'Applying Kubernetes manifests to Minikube...'
                 sh '''
                     sed "s|maanyarao/node-cicd-app:latest|${IMAGE_NAME}:${BUILD_NUMBER}|g" \
                         k8s/deployment.yaml | kubectl apply -f -
@@ -56,12 +60,13 @@ pipeline {
             }
         }
 
-        stage('Verify Deployment') {
+        stage('Verification') {
             steps {
+                echo 'Verifying deployment rollout status and pod health...'
                 sh '''
                     kubectl rollout status deployment/node-cicd-app --timeout=120s
-                    kubectl get pods
-                    kubectl get services
+                    kubectl get pods -l app=node-cicd-app
+                    kubectl get service node-cicd-app-service
                 '''
             }
         }

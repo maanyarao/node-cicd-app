@@ -1,167 +1,124 @@
-# 🚀 Simple Jenkins CI/CD Pipeline Lab Project
+# 🚀 Automated CI/CD Pipeline & Kubernetes Deployment (CCA 2)
 
-A lightweight, zero-test Node.js & Express web application designed specifically for **University Lab Demonstrations** of a Jenkins CI/CD pipeline.
-
----
-
-## 📋 Architecture Overview
-
-```
-[ Developer ] 
-      │ git push
-      ▼
- [ GitHub ]
-      │ webhook / poll
-      ▼
- [ Jenkins ]  ─── (CI: Git Checkout & Docker Build)
-      │
-      ▼
-  [ Docker ]  ─── (CD: Stop old container & Run new container)
-      │
-      ▼
-[ Live App ]  ─── http://localhost:3000
-```
-
-- **Application:** Node.js + Express (renders a modern status dashboard and `/health` JSON endpoint).
-- **CI (Continuous Integration):** Jenkins pulls code and builds the Docker image.
-- **CD (Continuous Deployment):** Jenkins stops any older container and launches the updated container on port 3000.
-- **Job Type:** Jenkins **Freestyle Project** (with an optional `Jenkinsfile` included for pipeline demonstrations).
+**Course:** TYCSE · Cloud Computing and DevOps  
+**Student Name:** Maanya Rao  
+**Repository:** [https://github.com/maanyarao/node-cicd-app](https://github.com/maanyarao/node-cicd-app)  
+**Container Registry:** [Docker Hub: maanyarao/node-cicd-app](https://hub.docker.com/r/maanyarao/node-cicd-app)  
 
 ---
 
-## 📁 Repository Structure
+## 📌 Project Overview
+This repository contains an automated end-to-end Continuous Integration and Continuous Deployment (CI/CD) pipeline for a **Node.js & Express** web application. The pipeline is orchestrated using **Jenkins** running on an **AWS EC2 instance**, containerized using **Docker**, stored in **Docker Hub**, and automatically deployed onto a local **Kubernetes cluster using Minikube**.
+
+---
+
+## 🏗️ Architecture & Workflow
 
 ```
-.
-├── app.js             # Express application & dashboard UI
-├── package.json       # App configuration & dependencies
-├── Dockerfile         # Container definition (Node 20 Alpine)
-├── deploy.sh          # Deployment script used by Jenkins
-├── Jenkinsfile        # Declarative pipeline (optional alternative)
-├── .dockerignore      # Files excluded from Docker builds
-├── .gitignore         # Files excluded from Git tracking
-└── README.md          # Step-by-step setup guide & viva notes
+                                 AWS EC2 SERVER
+                         ┌─────────────────────────────────────────────────┐
+[ Developer ]            │   [ Jenkins Server (Port 8080) ]                │
+      │                  │         │                                       │
+      │ git push         │         ▼ (Poll SCM / Webhook)                  │
+      ▼                  │   [ Declarative Jenkinsfile ]                   │
+ [ GitHub Repo ] ────────┼──►      ├─ Stage 1: Jenkins Checkout            │
+                         │         ├─ Stage 2: Build and Test              │
+                         │         ├─ Stage 3: Docker Build                │
+                         │         │                                       │
+ [ Docker Hub ] ◄────────┼─────────┴─ Stage 4: Push Image                  │
+ (maanyarao/node-cicd-app) │                                                │
+      │                  │         ┌─ Stage 5: Minikube Deployment         │
+      │ kubectl pull     │         │                                       │
+      └──────────────────┼─────────► [ Minikube K8s Cluster ]              │
+                         │                 │                               │
+                         │                 ├─ Deployment (node-cicd-app)   │
+                         │                 └─ Service (NodePort: 30080)    │
+                         │                                                 │
+                         │   [ Live Application (Port 30080) ]             │
+                         └─────────────────▲───────────────────────────────┘
+                                           │
+                                     View in Browser
 ```
 
 ---
 
-## 🛠️ Step 1: Push this Project to GitHub
+## 📋 Pipeline Stages Explained
 
-Jenkins needs a Git repository to pull code from.
-
-1. Create a new repository on [GitHub](https://github.com) (e.g., `jenkins-cicd-demo`).
-2. Run the following commands in this directory:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit for Jenkins CI/CD lab"
-   git branch -M main
-   git remote add origin https://github.com/<YOUR-USERNAME>/<YOUR-REPO-NAME>.git
-   git push -u origin main
-   ```
+| Stage | Stage Name | Action & Technical Description |
+| :---: | :--- | :--- |
+| **1** | **Jenkins Checkout** | Clones the latest commit from the GitHub repository (`main` branch) onto the Jenkins workspace using `checkout scm`. |
+| **2** | **Build and Test** | Performs code syntax validation using Node's native compiler check (`node --check app.js`), ensuring zero syntax errors before proceeding. |
+| **3** | **Docker Build** | Builds an optimized container image using the `Dockerfile` with multi-tagging: dynamic build version `${IMAGE_NAME}:${BUILD_NUMBER}` and `${IMAGE_NAME}:latest`. |
+| **4** | **Push Image** | Authenticates securely with Docker Hub using Jenkins credentials (`dockerhub-credentials`) and publishes both tags to the remote container registry. |
+| **5** | **Minikube Deployment** | Dynamically substitutes the image tag in `k8s/deployment.yaml` with the current build number and applies the Deployment and Service manifests via `kubectl apply`. |
+| **6** | **Verification** | Awaits rollout completion (`kubectl rollout status deployment/node-cicd-app`) and outputs active pod and service statuses for automated verification. |
 
 ---
 
-## ⚙️ Step 2: Configure Jenkins Freestyle Project
+## ⚙️ How Jenkins & Minikube Were Set Up on AWS
 
-1. Open Jenkins in your browser (usually `http://localhost:8080`).
-2. Click **"New Item"** from the left sidebar:
-   - **Enter an item name:** `node-cicd-lab`
-   - **Select:** `Freestyle project`
-   - Click **OK**.
+1. **AWS EC2 Provisioning:**
+   - **Instance Type:** `t2.medium` (Ubuntu 22.04 LTS, 2 vCPUs, 4 GB RAM, 30 GB SSD) to ensure sufficient resources for Jenkins, Docker, and Minikube.
+   - **Security Group Inbound Rules:**
+     - Port `22` (SSH access)
+     - Port `8080` (Jenkins Web UI)
+     - Port `30080` (Kubernetes NodePort application access)
+     - Port `3000` (Direct test port)
 
-### A. General & Source Code Management (SCM)
-1. Under **Source Code Management**, select **Git**.
-2. **Repository URL:** Paste your GitHub repository URL (e.g., `https://github.com/<username>/<repo>.git`).
-3. **Credentials:** Leave as `none` if the repo is public. If private, add your GitHub Personal Access Token (PAT).
-4. **Branches to build:** Set `*/main` (or `*/master` depending on your default branch).
+2. **Software Installation:**
+   - **Java 17 (OpenJDK)** & **Node.js 20 LTS**
+   - **Docker Engine (CE)** (`systemctl enable --now docker`)
+   - **Jenkins LTS** (`systemctl enable --now jenkins`)
+   - **kubectl** & **Minikube** (`minikube start --driver=docker`)
 
-### B. Build Triggers (Optional for auto-trigger)
-- **Manual Trigger:** Leave unselected (you will click **"Build Now"** manually).
-- **Automated Poll SCM:** Check **Poll SCM** and enter `* * * * *` (checks GitHub every minute for new commits).
-- **GitHub hook trigger:** Check **GitHub hook trigger for GITScm polling** (if using GitHub webhooks).
-
-### C. Build Steps
-1. Scroll down to the **Build Steps** section.
-2. Click **Add build step** ➔ select **Execute shell**.
-3. Paste the following commands into the **Command** text area:
-
-```bash
-#!/bin/bash
-# Make deploy script executable and run it
-chmod +x deploy.sh
-./deploy.sh
-```
-
-*(Alternatively, you can paste the contents of `deploy.sh` directly into the Execute shell box).*
-
-4. Click **Save**.
+3. **Permissions & Integration:**
+   - Added user `jenkins` to the `docker` group: `sudo usermod -aG docker jenkins`.
+   - Shared Minikube cluster certificates and kubeconfig to `/var/lib/jenkins/.kube/config` and granted ownership to `jenkins:jenkins`.
 
 ---
 
-## 🧪 Step 3: Run & Demonstrate the Pipeline
+## 🔐 Docker Hub Integration & Credentials
 
-1. In your project dashboard on Jenkins, click **"Build Now"**.
-2. Under **Build History** on the left, click the latest build number (e.g., `#1`).
-3. Click **Console Output** to watch the real-time execution logs.
-4. You should see:
-   - Git checkout succeeding
-   - Docker building the image `node-cicd-app:latest`
-   - Docker starting the container on port `3000`
-   - `Finished: SUCCESS`
-5. Open your browser and navigate to:
-   - **Dashboard:** [http://localhost:3000](http://localhost:3000)
-   - **Health Check:** [http://localhost:3000/health](http://localhost:3000/health)
+- Generated a secure Docker Hub Personal Access Token (PAT).
+- Configured within Jenkins under **Manage Jenkins** ➔ **Credentials** as a `Username with password` credential named **`dockerhub-credentials`**.
+- Utilized in `Jenkinsfile` through `withCredentials([usernamePassword(...)])`, which dynamically injects credentials without exposing them in console output or version control.
 
 ---
 
-## 🔄 Step 4: Demonstrate Continuous Deployment (CD)
+## ☸️ Kubernetes Deployment & Service Manifests
 
-To impress your lab instructor:
-1. Open [app.js](file:///home/yash/college/ci-cd/app.js).
-2. Change the title or text (e.g., change `University Lab CI/CD Demo` to `University Lab CI/CD Demo - Version 2`).
-3. Commit and push:
-   ```bash
-   git add app.js
-   git commit -m "Update app version to v2"
-   git push origin main
-   ```
-4. Click **"Build Now"** in Jenkins (or wait for the Poll SCM trigger).
-5. Refresh [http://localhost:3000](http://localhost:3000) — the new version is live instantly with zero manual server restart!
-
----
-
-## ⚠️ Common Troubleshooting
-
-### 1. `docker: command not found` or `permission denied while trying to connect to Docker daemon`
-Jenkins runs as user `jenkins`. By default, it might not have rights to run Docker commands:
-```bash
-# Add jenkins user to the docker group
-sudo usermod -aG docker jenkins
-
-# Restart Jenkins service
-sudo systemctl restart jenkins
-```
-
-### 2. Testing Locally Without Jenkins
-You can test the application and deployment script directly on your terminal:
-```bash
-# Direct run with Node:
-npm install
-npm start
-
-# Or test Docker build manually:
-chmod +x deploy.sh
-./deploy.sh
-```
+Located inside the [`k8s/`](file:///Users/MAANYA/Downloads/ci-cd/k8s) directory:
+- **`k8s/deployment.yaml`:**
+  - Deployment name: `node-cicd-app`
+  - Replicas: `1`
+  - Container image: dynamically injected as `maanyarao/node-cicd-app:${BUILD_NUMBER}`
+  - Target container port: `3000`
+- **`k8s/service.yaml`:**
+  - Service type: `NodePort`
+  - Internal targetPort: `3000`
+  - Exposed nodePort: `30080`
 
 ---
 
-## 🎓 University Lab Viva / Oral Exam Quick Reference
+## 🔄 Code Change & Automated Redeployment Demonstration
 
-| Question | Answer |
-| :--- | :--- |
-| **What is CI (Continuous Integration)?** | The practice of automatically building and validating code every time a team member pushes changes to version control. |
-| **What is CD (Continuous Deployment)?** | Automatically deploying every valid build directly into the production/target environment without manual intervention. |
-| **Why use Docker in CI/CD?** | Docker packages the application with all its dependencies into an isolated container, ensuring the app runs identically in development, Jenkins, and production. |
-| **Freestyle vs. Pipeline in Jenkins?** | **Freestyle:** Configured via Jenkins GUI form fields (great for simple jobs).<br>**Pipeline:** Defined as code (`Jenkinsfile`) versioned alongside application code (industry standard). |
+To demonstrate Continuous Deployment (CD):
+1. **Initial Run (Build #1):**
+   - Code from initial commit built and deployed as `maanyarao/node-cicd-app:1`.
+   - Accessible at `http://<EC2-IP>:30080` showing the initial UI.
+2. **Source Code Update (Build #2):**
+   - Updated `app.js` header to announce the redeployment.
+   - Committed and pushed to GitHub:
+     ```bash
+     git add app.js
+     git commit -m "feat: release version 2.0 with updated UI header"
+     git push origin main
+     ```
+   - Jenkins detected changes via SCM polling and triggered Build `#2`.
+   - Kubernetes performed a rolling update: pulling `maanyarao/node-cicd-app:2` and replacing the older pod with zero downtime.
+   - Refreshed browser to verify the new version live.
+
+---
+
+## 📖 Complete Step-by-Step Execution Guide
+For detailed copy-paste bash scripts, AWS setup commands, and viva preparation, refer to the [Complete Assignment Execution Guide (ASSIGNMENT_EXECUTION_GUIDE.md)](./ASSIGNMENT_EXECUTION_GUIDE.md).
